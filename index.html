@@ -855,6 +855,14 @@ function render(){
   scheduleAutosave();
   restoreUiState(ui);
 }
+let renderDebounceTimer = null;
+function scheduleRender(){
+  if(renderDebounceTimer) clearTimeout(renderDebounceTimer);
+  renderDebounceTimer = setTimeout(()=>{
+    renderDebounceTimer = null;
+    render();
+  }, 500);
+}
 
 function renderBoard(){
   const steps = [
@@ -875,7 +883,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v2.2</div>
+        <div class="tag">Tournament Builder · v2.3</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -1243,8 +1251,8 @@ function renderMatchRowEl(m, opts){
     </div>
   `);
   const inputs = row.querySelectorAll('input');
-  inputs[0].addEventListener('input', e=>{ m.scoreA = e.target.value===''? null : e.target.value; render(); });
-  inputs[1].addEventListener('input', e=>{ m.scoreB = e.target.value===''? null : e.target.value; render(); });
+  inputs[0].addEventListener('input', e=>{ m.scoreA = e.target.value===''? null : e.target.value; scheduleRender(); });
+  inputs[1].addEventListener('input', e=>{ m.scoreB = e.target.value===''? null : e.target.value; scheduleRender(); });
   return row;
 }
 
@@ -1740,8 +1748,8 @@ function renderBracket(){
       if(canScore){
         scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-a" value="${m.scoreA===null?'':m.scoreA}">`);
         scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-b" value="${m.scoreB===null?'':m.scoreB}">`);
-        scoreAInput.addEventListener('input', e=>{ m.scoreA = e.target.value===''?null:e.target.value; propagateByes(); render(); });
-        scoreBInput.addEventListener('input', e=>{ m.scoreB = e.target.value===''?null:e.target.value; propagateByes(); render(); });
+        scoreAInput.addEventListener('input', e=>{ m.scoreA = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
+        scoreBInput.addEventListener('input', e=>{ m.scoreB = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
       }
       box.appendChild(renderSlot(m, 'a', ri, mi, scoreAInput));
       box.appendChild(el(`<div class="bdivider"></div>`));
@@ -1779,8 +1787,8 @@ function renderBracket(){
     if(canScore){
       scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-a" value="${m3.scoreA===null?'':m3.scoreA}">`);
       scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-b" value="${m3.scoreB===null?'':m3.scoreB}">`);
-      scoreAInput.addEventListener('input', e=>{ m3.scoreA = e.target.value===''?null:e.target.value; propagateByes(); render(); });
-      scoreBInput.addEventListener('input', e=>{ m3.scoreB = e.target.value===''?null:e.target.value; propagateByes(); render(); });
+      scoreAInput.addEventListener('input', e=>{ m3.scoreA = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
+      scoreBInput.addEventListener('input', e=>{ m3.scoreB = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
     }
     box.appendChild(renderSlot(m3, 'a', -1, -1, scoreAInput));
     box.appendChild(el(`<div class="bdivider"></div>`));
