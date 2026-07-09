@@ -811,7 +811,30 @@ function showAlertModal(message){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
 }
 
+function captureUiState(){
+  const active = document.activeElement;
+  let key = null, selStart = null, selEnd = null;
+  if(active && active.getAttribute && active.getAttribute('data-input-key')){
+    key = active.getAttribute('data-input-key');
+    try{ selStart = active.selectionStart; selEnd = active.selectionEnd; }catch(e){}
+  }
+  return { key, selStart, selEnd, scrollX: window.scrollX, scrollY: window.scrollY };
+}
+function restoreUiState(ui){
+  if(!ui) return;
+  if(ui.key){
+    const el2 = document.querySelector(`[data-input-key="${ui.key}"]`);
+    if(el2){
+      el2.focus({preventScroll:true});
+      if(ui.selStart!==null && ui.selStart!==undefined){
+        try{ el2.setSelectionRange(ui.selStart, ui.selEnd); }catch(e){}
+      }
+    }
+  }
+  window.scrollTo(ui.scrollX, ui.scrollY);
+}
 function render(){
+  const ui = captureUiState();
   const app = document.getElementById('app');
   app.innerHTML = '';
   app.appendChild(renderBoard());
@@ -827,6 +850,7 @@ function render(){
     drawBracketConnectors(panel);
   }
   scheduleAutosave();
+  restoreUiState(ui);
 }
 
 function renderBoard(){
@@ -848,7 +872,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v2.0</div>
+        <div class="tag">Tournament Builder · v2.1</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -1208,9 +1232,9 @@ function renderMatchRowEl(m, opts){
     <div class="match-row ${decided?'match-decided':''} ${drawn?'match-drawn':''}">
       ${badge}${groupTag}
       <div class="match-team left ${aCls}">${escapeHtml(teamName(m.a))}</div>
-      <input type="number" min="0" value="${m.scoreA===null?'':m.scoreA}">
+      <input type="number" min="0" data-input-key="prelim-${m.id}-a" value="${m.scoreA===null?'':m.scoreA}">
       <span class="vs">−</span>
-      <input type="number" min="0" value="${m.scoreB===null?'':m.scoreB}">
+      <input type="number" min="0" data-input-key="prelim-${m.id}-b" value="${m.scoreB===null?'':m.scoreB}">
       <div class="match-team ${bCls}">${escapeHtml(teamName(m.b))}</div>
       ${drawTag}
     </div>
@@ -1711,8 +1735,8 @@ function renderBracket(){
       const canScore = !(ri===0 && bracketEditMode) && !m.forfeitWinner && m.a && m.b && m.a!=='BYE' && m.b!=='BYE';
       let scoreAInput=null, scoreBInput=null;
       if(canScore){
-        scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" value="${m.scoreA===null?'':m.scoreA}">`);
-        scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" value="${m.scoreB===null?'':m.scoreB}">`);
+        scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-a" value="${m.scoreA===null?'':m.scoreA}">`);
+        scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-b" value="${m.scoreB===null?'':m.scoreB}">`);
         scoreAInput.addEventListener('input', e=>{ m.scoreA = e.target.value===''?null:e.target.value; propagateByes(); render(); });
         scoreBInput.addEventListener('input', e=>{ m.scoreB = e.target.value===''?null:e.target.value; propagateByes(); render(); });
       }
@@ -1750,8 +1774,8 @@ function renderBracket(){
     const canScore = !m3.forfeitWinner && m3.a && m3.b;
     let scoreAInput=null, scoreBInput=null;
     if(canScore){
-      scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" value="${m3.scoreA===null?'':m3.scoreA}">`);
-      scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" value="${m3.scoreB===null?'':m3.scoreB}">`);
+      scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-a" value="${m3.scoreA===null?'':m3.scoreA}">`);
+      scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-b" value="${m3.scoreB===null?'':m3.scoreB}">`);
       scoreAInput.addEventListener('input', e=>{ m3.scoreA = e.target.value===''?null:e.target.value; propagateByes(); render(); });
       scoreBInput.addEventListener('input', e=>{ m3.scoreB = e.target.value===''?null:e.target.value; propagateByes(); render(); });
     }
