@@ -820,12 +820,15 @@ function captureUiState(){
   }
   return { key, selStart, selEnd, scrollX: window.scrollX, scrollY: window.scrollY };
 }
+let isRestoringFocus = false;
 function restoreUiState(ui){
   if(!ui) return;
   if(ui.key){
     const el2 = document.querySelector(`[data-input-key="${ui.key}"]`);
     if(el2){
+      isRestoringFocus = true;
       el2.focus({preventScroll:true});
+      isRestoringFocus = false;
       if(ui.selStart!==null && ui.selStart!==undefined){
         try{ el2.setSelectionRange(ui.selStart, ui.selEnd); }catch(e){}
       }
@@ -872,7 +875,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v2.1</div>
+        <div class="tag">Tournament Builder · v2.2</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -1919,6 +1922,7 @@ if ('serviceWorker' in navigator && (location.protocol==='https:' || location.ho
 }
 
 document.addEventListener('focus', function(e){
+  if(isRestoringFocus) return;
   if(e.target && e.target.tagName==='INPUT' && e.target.type==='number'){
     e.target.select();
   }
