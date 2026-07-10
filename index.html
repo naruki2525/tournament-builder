@@ -185,54 +185,12 @@
       display:block;font-size:11px;color:var(--sub);text-align:right;padding:4px 4px 0;
     }
   }
-
-  /* ---- 印刷専用レイアウト ---- */
-  #printArea{display:none;}
-  .print-page{padding:22px 0;font-family:"Hiragino Sans","Yu Gothic UI",sans-serif;color:#12213A;display:flex;justify-content:center;}
-  .print-square{width:100%;max-width:680px;min-height:680px;box-sizing:border-box;border:2.5px solid #185FA5;border-radius:12px;padding:28px 30px;display:flex;flex-direction:column;}
-  .print-header{border-bottom:3px solid #185FA5;padding-bottom:12px;margin-bottom:18px;text-align:center;}
-  .print-title{font-size:24px;font-weight:800;color:#12213A;}
-  .print-sub{font-size:12px;letter-spacing:.14em;color:#5C6B84;text-transform:uppercase;margin-top:3px;}
-
-  .print-bracket-table{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;}
-  .print-bracket-table td{border:1px solid #D3DAE6;padding:8px 10px;font-weight:700;}
-  .print-bracket-table tr.round-row td{background:#185FA5;color:#fff;font-weight:800;font-size:11.5px;letter-spacing:.08em;text-align:center;border-color:#185FA5;padding:6px 10px;}
-  .print-bracket-table td.tcell{width:42%;}
-  .print-bracket-table td.tcell.a{text-align:right;}
-  .print-bracket-table td.tcell.b{text-align:left;}
-  .print-bracket-table td.tcell.win{color:#185FA5;}
-  .print-bracket-table td.tcell.lose{color:#8A96AA;font-weight:600;}
-  .print-bracket-table td.scell{width:16%;text-align:center;background:#F2F6FB;font-variant-numeric:tabular-nums;}
-
-  .print-results{align-items:center;justify-content:center;text-align:center;position:relative;}
-  .print-results::before{content:"";position:absolute;inset:12px;border:1.5px solid #C9A84C;border-radius:6px;pointer-events:none;}
-  .print-results .pr-eyebrow{font-size:16px;letter-spacing:.3em;color:#C9A84C;text-transform:uppercase;font-weight:800;margin-bottom:10px;}
-  .print-results .pr-title{font-size:32px;font-weight:800;color:#12213A;margin-bottom:34px;}
-  .podium-item{margin:22px 0;}
-  .podium-item .medal{font-size:44px;line-height:1;}
-  .podium-item .label{font-size:14px;letter-spacing:.18em;color:#5C6B84;text-transform:uppercase;font-weight:700;margin-top:4px;}
-  .podium-item .pname-big{font-size:30px;font-weight:800;color:#12213A;margin-top:4px;}
-  .podium-item.gold .pname-big{font-size:46px;color:#185FA5;}
-  .podium-item.gold .medal{font-size:58px;}
-  .podium-item.silver .pname-big{color:#5C6B84;}
-  .podium-item.bronze .pname-big{color:#C9821F;}
-  .print-date{margin-top:30px;font-size:13px;color:#8A96AA;}
-
-  @media print{
-    @page{margin:14mm;}
-    body *{visibility:hidden;}
-    #printArea, #printArea *{visibility:visible;}
-    #printArea{display:block;position:absolute;left:0;top:0;width:100%;}
-    .print-page{page-break-after:always;break-after:page;}
-    .print-page:last-child{page-break-after:auto;break-after:auto;}
-    .print-square{border-color:#185FA5;}
-  }
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
-<div id="printArea"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ============================= STATE ============================= */
 let state = {
@@ -905,7 +863,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v2.4</div>
+        <div class="tag">Tournament Builder · v3.0</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -923,8 +881,8 @@ function renderBoard(){
           <button class="btn-ghost btn-sm" id="resetTournamentBtn" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);" title="新しい大会">
             🔄<span class="btn-label"> 新しい大会</span>
           </button>
-          <button class="btn-ghost btn-sm" id="printBtn" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);" title="印刷">
-            🖨<span class="btn-label"> 印刷</span>
+          <button class="btn-ghost btn-sm" id="snsImageBtn" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);" ${state.teams.length===0?'disabled':''} title="SNS用画像を保存">
+            📸<span class="btn-label"> 画像を保存</span>
           </button>
         </div>
         <div class="steps">${stepsHtml}</div>
@@ -943,12 +901,9 @@ function renderBoard(){
       }
     }, 30);
   });
-  const printBtn = board.querySelector('#printBtn');
-  if(!printBtn.disabled){
-    printBtn.addEventListener('click', ()=>{
-      buildPrintArea();
-      window.print();
-    });
+  const snsImageBtn = board.querySelector('#snsImageBtn');
+  if(!snsImageBtn.disabled){
+    snsImageBtn.addEventListener('click', ()=>{ showSnsImageModal(); });
   }
   const resetBtn = board.querySelector('#resetTournamentBtn');
   if(!resetBtn.disabled){
@@ -1629,133 +1584,262 @@ function getFinalStandings(){
   };
 }
 
-/* ============================= 印刷用ページ生成 ============================= */
+/* ============================= SNS用画像を保存 ============================= */
 function matchScoreText(m){
   if(m.forfeitWinner) return '不戦勝';
   const hasScores = m.scoreA!==null && m.scoreA!=='' && m.scoreB!==null && m.scoreB!=='';
   return hasScores ? `${m.scoreA} - ${m.scoreB}` : '― : ―';
 }
-function buildPrintArea(){
-  const area = document.getElementById('printArea');
-  area.innerHTML = '';
-  const title = state.tournamentName && state.tournamentName.trim() ? state.tournamentName.trim() : '大会結果';
 
-  if(state.bracket){
-    area.appendChild(renderPrintBracketPage(title));
-    const standings = getFinalStandings();
-    if(standings) area.appendChild(renderPrintResultsPage(title, standings));
-  } else if(state.matches.length){
-    area.appendChild(renderPrintSchedulePage(title));
-  } else {
-    area.appendChild(el(`<div class="print-page"><div class="print-square"><div class="print-header"><div class="print-title">${escapeHtml(title)}</div></div><p>まだ印刷できるデータがありません。</p></div></div>`));
+function buildResultsImageDOM(w, h, standings, title){
+  const isStory = h > w;
+  const scale = w/1080;
+  const pad = Math.round((isStory ? 90 : 60) * scale);
+  const box = document.createElement('div');
+  box.style.cssText = `width:${w}px;height:${h}px;background:#F7F8FA;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Sans","Yu Gothic UI",sans-serif;box-sizing:border-box;`;
+  const inner = document.createElement('div');
+  inner.style.cssText = `position:relative;width:${w-pad*2}px;height:${h-pad*2}px;border:${Math.round(4*scale)}px solid #C9A84C;border-radius:${Math.round(18*scale)}px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;`;
+  const innerBorder = document.createElement('div');
+  const inset = Math.round(16*scale);
+  innerBorder.style.cssText = `position:absolute;inset:${inset}px;border:${Math.max(1,Math.round(2*scale))}px solid #C9A84C;border-radius:${Math.round(12*scale)}px;`;
+  inner.appendChild(innerBorder);
+
+  const eyebrow = document.createElement('div');
+  eyebrow.textContent = 'TOURNAMENT RESULTS';
+  eyebrow.style.cssText = `font-size:${Math.round(22*scale)}px;letter-spacing:.35em;color:#C9A84C;font-weight:800;margin-bottom:${Math.round(14*scale)}px;`;
+  inner.appendChild(eyebrow);
+
+  const titleEl = document.createElement('div');
+  titleEl.textContent = title;
+  titleEl.style.cssText = `font-size:${Math.round(40*scale)}px;font-weight:800;color:#12213A;margin-bottom:${Math.round((isStory?90:56)*scale)}px;max-width:80%;`;
+  inner.appendChild(titleEl);
+
+  function podiumRow(medal, label, names, big){
+    const row = document.createElement('div');
+    row.style.cssText = `margin:${Math.round((isStory?34:22)*scale)}px 0;`;
+    const medalEl = document.createElement('div');
+    medalEl.textContent = medal;
+    medalEl.style.cssText = `font-size:${Math.round((big?76:56)*scale)}px;line-height:1;`;
+    const labelEl = document.createElement('div');
+    labelEl.textContent = label;
+    labelEl.style.cssText = `font-size:${Math.round(16*scale)}px;letter-spacing:.18em;color:#5C6B84;text-transform:uppercase;font-weight:700;margin-top:${Math.round(6*scale)}px;`;
+    const nameEl = document.createElement('div');
+    nameEl.textContent = names;
+    nameEl.style.cssText = `font-size:${Math.round((big?58:38)*scale)}px;font-weight:800;color:${big?'#185FA5':'#12213A'};margin-top:${Math.round(6*scale)}px;max-width:${w*0.7}px;overflow-wrap:break-word;`;
+    row.appendChild(medalEl); row.appendChild(labelEl); row.appendChild(nameEl);
+    return row;
   }
+
+  inner.appendChild(podiumRow('🏆','Champion', standings.championName, true));
+  if(standings.runnerUpName) inner.appendChild(podiumRow('🥈','2nd Place', standings.runnerUpName, false));
+  if(standings.thirdPlaceNames.length) inner.appendChild(podiumRow('🥉','3rd Place', standings.thirdPlaceNames.join(' ・ ')));
+
+  const dateEl = document.createElement('div');
+  dateEl.textContent = new Date().toISOString().slice(0,10);
+  dateEl.style.cssText = `margin-top:${Math.round(40*scale)}px;font-size:${Math.round(16*scale)}px;color:#8A96AA;`;
+  inner.appendChild(dateEl);
+
+  box.appendChild(inner);
+  return box;
 }
-function renderPrintBracketPage(title){
-  const page = el(`<div class="print-page"></div>`);
-  const square = el(`<div class="print-square"><div class="print-header"><div class="print-title">${escapeHtml(title)}</div><div class="print-sub">Tournament Bracket</div></div></div>`);
-  const table = el(`<table class="print-bracket-table"><tbody></tbody></table>`);
-  const tbody = table.querySelector('tbody');
-  const rounds = state.bracket.rounds;
-  const roundNames = rounds.map((_,i)=>{
-    const remaining = rounds.length-i;
-    if(remaining===1) return '決勝';
-    if(remaining===2) return '準決勝';
-    if(remaining===3) return '準々決勝';
-    return `${i+1}回戦`;
-  });
+
+function buildBracketImageDOM(w, h, title){
+  const isStory = h > w;
+  const scale = w/1080;
+  const pad = Math.round((isStory ? 70 : 50) * scale);
+  const box = document.createElement('div');
+  box.style.cssText = `width:${w}px;height:${h}px;background:#F7F8FA;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Sans","Yu Gothic UI",sans-serif;box-sizing:border-box;`;
+  const inner = document.createElement('div');
+  inner.style.cssText = `width:${w-pad*2}px;height:${h-pad*2}px;border:${Math.round(3*scale)}px solid #185FA5;border-radius:${Math.round(14*scale)}px;background:#fff;box-sizing:border-box;padding:${Math.round(30*scale)}px;display:flex;flex-direction:column;overflow:hidden;`;
+
+  const header = document.createElement('div');
+  header.style.cssText = `border-bottom:${Math.round(3*scale)}px solid #185FA5;padding-bottom:${Math.round(14*scale)}px;margin-bottom:${Math.round(18*scale)}px;text-align:center;flex:none;`;
+  const titleEl = document.createElement('div');
+  titleEl.textContent = title;
+  titleEl.style.cssText = `font-size:${Math.round(32*scale)}px;font-weight:800;color:#12213A;`;
+  const subEl = document.createElement('div');
+  subEl.textContent = state.bracket ? 'TOURNAMENT BRACKET' : '予選対戦結果';
+  subEl.style.cssText = `font-size:${Math.round(15*scale)}px;letter-spacing:.14em;color:#5C6B84;text-transform:uppercase;margin-top:${Math.round(4*scale)}px;`;
+  header.appendChild(titleEl); header.appendChild(subEl);
+  inner.appendChild(header);
+
+  const table = document.createElement('table');
+  table.style.cssText = `width:100%;border-collapse:collapse;font-size:${Math.round(18*scale)}px;table-layout:fixed;flex:1;`;
+  const tbody = document.createElement('tbody');
+  table.appendChild(tbody);
+
+  function addSectionRow(text){
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 3;
+    td.textContent = text;
+    td.style.cssText = `background:#185FA5;color:#fff;font-weight:800;font-size:${Math.round(14*scale)}px;letter-spacing:.08em;text-align:center;padding:${Math.round(8*scale)}px ${Math.round(10*scale)}px;`;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
   function addMatchRow(m){
     const aName = m.a==='BYE' ? '（不戦勝）' : (m.a ? teamName(m.a) : '（未定）');
     const bName = m.b==='BYE' ? '（不戦勝）' : (m.b ? teamName(m.b) : '（未定）');
-    const w = m.winner;
-    const aCls = w ? (m.a===w?'win':'lose') : '';
-    const bCls = w ? (m.b===w?'win':'lose') : '';
-    tbody.appendChild(elRow(`
-      <tr>
-        <td class="tcell a ${aCls}">${escapeHtml(aName)}</td>
-        <td class="scell">${matchScoreText(m)}</td>
-        <td class="tcell b ${bCls}">${escapeHtml(bName)}</td>
-      </tr>
-    `));
+    const w2 = m.winner;
+    const aWin = w2 && m.a===w2, bWin = w2 && m.b===w2;
+    const tr = document.createElement('tr');
+    const tdA = document.createElement('td');
+    tdA.textContent = aName;
+    tdA.style.cssText = `border:1px solid #D3DAE6;padding:${Math.round(9*scale)}px ${Math.round(12*scale)}px;font-weight:700;text-align:right;width:42%;color:${aWin?'#185FA5':(w2?'#8A96AA':'#12213A')};`;
+    const tdS = document.createElement('td');
+    tdS.textContent = matchScoreText(m);
+    tdS.style.cssText = `border:1px solid #D3DAE6;padding:${Math.round(9*scale)}px ${Math.round(12*scale)}px;text-align:center;background:#F2F6FB;width:16%;font-weight:800;`;
+    const tdB = document.createElement('td');
+    tdB.textContent = bName;
+    tdB.style.cssText = `border:1px solid #D3DAE6;padding:${Math.round(9*scale)}px ${Math.round(12*scale)}px;font-weight:700;text-align:left;width:42%;color:${bWin?'#185FA5':(w2?'#8A96AA':'#12213A')};`;
+    tr.appendChild(tdA); tr.appendChild(tdS); tr.appendChild(tdB);
+    tbody.appendChild(tr);
   }
-  rounds.forEach((round, ri)=>{
-    const real = round.filter(m=> m.a!==null || m.b!==null);
-    if(!real.length) return;
-    tbody.appendChild(elRow(`<tr class="round-row"><td colspan="3">${roundNames[ri]}</td></tr>`));
-    real.forEach(addMatchRow);
-  });
-  const m3 = state.bracket.thirdPlaceMatch;
-  if(m3 && (m3.a || m3.b)){
-    tbody.appendChild(elRow(`<tr class="round-row"><td colspan="3">3位決定戦</td></tr>`));
-    addMatchRow(m3);
-  }
-  square.appendChild(table);
-  page.appendChild(square);
-  return page;
-}
-function renderPrintResultsPage(title, standings){
-  const page = el(`<div class="print-page"></div>`);
-  const square = el(`<div class="print-square print-results"></div>`);
-  square.appendChild(el(`<div class="pr-eyebrow">Tournament Results</div>`));
-  square.appendChild(el(`<div class="pr-title">${escapeHtml(title)}</div>`));
-  square.appendChild(el(`
-    <div class="podium-item gold">
-      <div class="medal">🏆</div>
-      <div class="label">Champion</div>
-      <div class="pname-big">${escapeHtml(standings.championName)}</div>
-    </div>
-  `));
-  if(standings.runnerUpName){
-    square.appendChild(el(`
-      <div class="podium-item silver">
-        <div class="medal">🥈</div>
-        <div class="label">2nd Place</div>
-        <div class="pname-big">${escapeHtml(standings.runnerUpName)}</div>
-      </div>
-    `));
-  }
-  if(standings.thirdPlaceNames.length){
-    square.appendChild(el(`
-      <div class="podium-item bronze">
-        <div class="medal">🥉</div>
-        <div class="label">3rd Place</div>
-        <div class="pname-big">${escapeHtml(standings.thirdPlaceNames.join(' ・ '))}</div>
-      </div>
-    `));
-  }
-  square.appendChild(el(`<div class="print-date">${new Date().toISOString().slice(0,10)}</div>`));
-  page.appendChild(square);
-  return page;
-}
-function renderPrintSchedulePage(title){
-  const page = el(`<div class="print-page"></div>`);
-  const square = el(`<div class="print-square"><div class="print-header"><div class="print-title">${escapeHtml(title)}</div><div class="print-sub">予選対戦結果</div></div></div>`);
-  const table = el(`<table class="print-bracket-table"><tbody></tbody></table>`);
-  const tbody = table.querySelector('tbody');
-  state.groups.forEach((_, gi)=>{
-    const label = state.groups.length>1 ? `グループ${String.fromCharCode(65+gi)}` : '予選';
-    const gMatches = state.matches.filter(m=>m.groupIdx===gi);
-    if(!gMatches.length) return;
-    tbody.appendChild(elRow(`<tr class="round-row"><td colspan="3">${escapeHtml(label)}</td></tr>`));
-    gMatches.forEach(m=>{
-      let w = m.forfeitWinner;
-      if(!w){
-        const hasScores = m.scoreA!==null && m.scoreA!=='' && m.scoreB!==null && m.scoreB!=='';
-        if(hasScores && Number(m.scoreA)!==Number(m.scoreB)) w = Number(m.scoreA)>Number(m.scoreB) ? m.a : m.b;
-      }
-      const aCls = w ? (m.a===w?'win':'lose') : '';
-      const bCls = w ? (m.b===w?'win':'lose') : '';
-      tbody.appendChild(elRow(`
-        <tr>
-          <td class="tcell a ${aCls}">${escapeHtml(teamName(m.a))}</td>
-          <td class="scell">${matchScoreText(m)}</td>
-          <td class="tcell b ${bCls}">${escapeHtml(teamName(m.b))}</td>
-        </tr>
-      `));
+
+  if(state.bracket){
+    const rounds = state.bracket.rounds;
+    const roundNames = rounds.map((_,i)=>{
+      const remaining = rounds.length-i;
+      if(remaining===1) return '決勝';
+      if(remaining===2) return '準決勝';
+      if(remaining===3) return '準々決勝';
+      return `${i+1}回戦`;
     });
+    rounds.forEach((round, ri)=>{
+      const real = round.filter(m=> m.a!==null || m.b!==null);
+      if(!real.length) return;
+      addSectionRow(roundNames[ri]);
+      real.forEach(addMatchRow);
+    });
+    const m3 = state.bracket.thirdPlaceMatch;
+    if(m3 && (m3.a || m3.b)){
+      addSectionRow('3位決定戦');
+      addMatchRow(m3);
+    }
+  } else {
+    state.groups.forEach((_, gi)=>{
+      const label = state.groups.length>1 ? `グループ${String.fromCharCode(65+gi)}` : '予選';
+      const gMatches = state.matches.filter(m=>m.groupIdx===gi);
+      if(!gMatches.length) return;
+      addSectionRow(label);
+      gMatches.forEach(m=>{
+        let w2 = m.forfeitWinner;
+        if(!w2){
+          const hasScores = m.scoreA!==null && m.scoreA!=='' && m.scoreB!==null && m.scoreB!=='';
+          if(hasScores && Number(m.scoreA)!==Number(m.scoreB)) w2 = Number(m.scoreA)>Number(m.scoreB) ? m.a : m.b;
+        }
+        addMatchRow(Object.assign({}, m, {winner:w2}));
+      });
+    });
+  }
+
+  inner.appendChild(table);
+  box.appendChild(inner);
+  return box;
+}
+
+async function exportSnsImage(contentType, format){
+  if(typeof html2canvas==='undefined'){
+    showAlertModal('画像生成ライブラリの読み込みに失敗しました。インターネット接続を確認してもう一度お試しください。');
+    return;
+  }
+  const title = state.tournamentName && state.tournamentName.trim() ? state.tournamentName.trim() : '大会結果';
+  const w = 1080;
+  const h = format==='story' ? 1920 : 1080;
+
+  let dom;
+  if(contentType==='results'){
+    const standings = getFinalStandings();
+    if(!standings){
+      showAlertModal('まだ優勝が決まっていないため、結果発表画像は作れません。');
+      return;
+    }
+    dom = buildResultsImageDOM(w, h, standings, title);
+  } else {
+    if(!state.bracket && !state.matches.length){
+      showAlertModal('まだ作成できるデータがありません。');
+      return;
+    }
+    dom = buildBracketImageDOM(w, h, title);
+  }
+
+  dom.style.position = 'fixed';
+  dom.style.left = '-99999px';
+  dom.style.top = '0';
+  document.body.appendChild(dom);
+  try{
+    const canvas = await html2canvas(dom, {width:w, height:h, scale:1, backgroundColor:'#F7F8FA'});
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    const kindLabel = contentType==='results' ? '結果発表' : 'トーナメント表';
+    const sizeLabel = format==='story' ? 'ストーリー' : '正方形';
+    const safeName = title.replace(/[\\/:*?"<>|]/g,'_');
+    a.href = dataUrl;
+    a.download = `${safeName}_${kindLabel}_${sizeLabel}.png`;
+    a.click();
+    showToast('📸 画像を保存しました');
+  } finally {
+    document.body.removeChild(dom);
+  }
+}
+
+function showSnsImageModal(){
+  let contentType = state.bracket ? 'results' : 'bracket';
+  let format = 'square';
+  const overlay = el(`<div style="position:fixed;inset:0;background:rgba(18,33,58,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;"></div>`);
+  const box = el(`
+    <div style="background:#fff;border-radius:14px;padding:26px;max-width:380px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+      <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;color:var(--navy);">📸 SNS用画像を保存</h3>
+      <p style="margin:0 0 16px;font-size:12.5px;color:var(--sub);">内容とサイズを選んで保存します。</p>
+      <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:6px;">内容</div>
+      <div class="row" id="snsContentRow" style="gap:8px;margin-bottom:16px;"></div>
+      <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:6px;">サイズ</div>
+      <div class="row" id="snsFormatRow" style="gap:8px;margin-bottom:22px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn-ghost" data-role="cancel">キャンセル</button>
+        <button class="btn-amber" data-role="save">保存する</button>
+      </div>
+    </div>
+  `);
+  const contentRow = box.querySelector('#snsContentRow');
+  const formatRow = box.querySelector('#snsFormatRow');
+
+  function pill(label, active){
+    return el(`<button type="button" class="btn-ghost btn-sm" style="${active?'background:var(--navy);color:#fff;border-color:var(--navy);':''}">${label}</button>`);
+  }
+  function renderContentOptions(){
+    contentRow.innerHTML = '';
+    const opts = [
+      {key:'results', label:'🏆 結果発表', disabled: !getFinalStandings()},
+      {key:'bracket', label:'📊 対戦表', disabled: !state.bracket && !state.matches.length},
+    ];
+    opts.forEach(o=>{
+      const btn = pill(o.label, contentType===o.key);
+      if(o.disabled) btn.disabled = true;
+      btn.addEventListener('click', ()=>{ contentType=o.key; renderContentOptions(); });
+      contentRow.appendChild(btn);
+    });
+  }
+  function renderFormatOptions(){
+    formatRow.innerHTML = '';
+    [['square','□ 正方形（フィード）'],['story','▯ 縦長（ストーリー）']].forEach(([key,label])=>{
+      const btn = pill(label, format===key);
+      btn.addEventListener('click', ()=>{ format=key; renderFormatOptions(); });
+      formatRow.appendChild(btn);
+    });
+  }
+  renderContentOptions();
+  renderFormatOptions();
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  function close(){ if(overlay.parentNode) document.body.removeChild(overlay); }
+  box.querySelector('[data-role="cancel"]').addEventListener('click', close);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
+  box.querySelector('[data-role="save"]').addEventListener('click', ()=>{
+    close();
+    exportSnsImage(contentType, format);
   });
-  square.appendChild(table);
-  page.appendChild(square);
-  return page;
 }
 
 function renderBracket(){
