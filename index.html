@@ -863,7 +863,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v3.0</div>
+        <div class="tag">Tournament Builder · v3.1</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -883,6 +883,9 @@ function renderBoard(){
           </button>
           <button class="btn-ghost btn-sm" id="snsImageBtn" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);" ${state.teams.length===0?'disabled':''} title="SNS用画像を保存">
             📸<span class="btn-label"> 画像を保存</span>
+          </button>
+          <button class="btn-ghost btn-sm" id="manualBtn" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);" title="マニュアル">
+            📖<span class="btn-label"> マニュアル</span>
           </button>
         </div>
         <div class="steps">${stepsHtml}</div>
@@ -905,6 +908,9 @@ function renderBoard(){
   if(!snsImageBtn.disabled){
     snsImageBtn.addEventListener('click', ()=>{ showSnsImageModal(); });
   }
+  board.querySelector('#manualBtn').addEventListener('click', ()=>{
+    window.open('manual.html', '_blank');
+  });
   const resetBtn = board.querySelector('#resetTournamentBtn');
   if(!resetBtn.disabled){
     resetBtn.addEventListener('click', ()=>{
