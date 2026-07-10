@@ -447,6 +447,7 @@ async function deleteHistoryEntry(id){
   state.history = state.history.filter(h=>h.id!==id);
   await persistHistory(state.history);
   render();
+  showToast('大会履歴を削除しました');
 }
 
 /* ============================= 棄権・不戦敗 ============================= */
@@ -514,6 +515,7 @@ function undoWithdrawal(teamId){
     propagateByes();
   }
   render();
+  showToast('棄権を取り消しました');
 }
 
 /* ============================= EXCEL EXPORT ============================= */
@@ -605,6 +607,7 @@ function exportToExcel(){
   const baseName = (state.tournamentName && state.tournamentName.trim()) ? state.tournamentName.trim() : '大会結果';
   const safeName = baseName.replace(/[\\/:*?"<>|]/g,'_');
   XLSX.writeFile(wb, `${safeName}.xlsx`);
+  showToast('📊 Excelファイルをダウンロードしました');
 }
 
 /* ---- schedule ordering ----
@@ -811,6 +814,25 @@ function showAlertModal(message){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) close(); });
 }
 
+/* ---- 軽い通知（トースト） ---- */
+let toastContainer = null;
+function showToast(message){
+  if(!toastContainer){
+    toastContainer = document.createElement('div');
+    toastContainer.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;';
+    document.body.appendChild(toastContainer);
+  }
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = 'background:var(--navy);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;box-shadow:0 6px 18px rgba(18,33,58,0.3);opacity:0;transform:translateY(8px);transition:opacity .2s ease, transform .2s ease;';
+  toastContainer.appendChild(toast);
+  requestAnimationFrame(()=>{ toast.style.opacity='1'; toast.style.transform='translateY(0)'; });
+  setTimeout(()=>{
+    toast.style.opacity='0'; toast.style.transform='translateY(8px)';
+    setTimeout(()=>{ if(toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
+  }, 2200);
+}
+
 function captureUiState(){
   const active = document.activeElement;
   let key = null, selStart = null, selEnd = null;
@@ -883,7 +905,7 @@ function renderBoard(){
   const board = el(`
     <div class="board">
       <div>
-        <div class="tag">Tournament Builder · v2.3</div>
+        <div class="tag">Tournament Builder · v2.4</div>
         <h1>${escapeHtml(titleText)}</h1>
         <div id="autosaveIndicator" style="font-size:11px;color:#9FB0CC;margin-top:4px;"></div>
       </div>
@@ -910,7 +932,17 @@ function renderBoard(){
     </div>
   `);
   const exportBtn = board.querySelector('#exportExcelBtn');
-  if(!exportBtn.disabled) exportBtn.addEventListener('click', exportToExcel);
+  if(!exportBtn.disabled) exportBtn.addEventListener('click', ()=>{
+    const original = exportBtn.innerHTML;
+    exportBtn.disabled = true;
+    exportBtn.innerHTML = '⏳<span class="btn-label"> 生成中…</span>';
+    setTimeout(()=>{
+      try{ exportToExcel(); } finally {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = original;
+      }
+    }, 30);
+  });
   const printBtn = board.querySelector('#printBtn');
   if(!printBtn.disabled){
     printBtn.addEventListener('click', ()=>{
@@ -1110,6 +1142,14 @@ function renderSetup(){
 function escapeHtml(s){
   return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function clampScoreValue(raw){
+  if(raw===''||raw===null||raw===undefined) return null;
+  let n = Number(raw);
+  if(isNaN(n)) return null;
+  n = Math.floor(Math.abs(n));
+  if(n>999) n=999;
+  return String(n);
+}
 
 /* ---- STAGE 2: groups ---- */
 function autoAssignGroups(){
@@ -1148,7 +1188,7 @@ function renderGroups(){
     autoAssignGroups();
     render();
   });
-  wrap.querySelector('#reshuffleBtn').addEventListener('click', ()=>{ autoAssignGroups(); render(); });
+  wrap.querySelector('#reshuffleBtn').addEventListener('click', ()=>{ autoAssignGroups(); render(); showToast('🔀 チームを再振り分けしました'); });
 
   const grid = wrap.querySelector('#groupGrid');
   state.groups.forEach((teamIds, gi)=>{
@@ -1239,20 +1279,21 @@ function renderMatchRowEl(m, opts){
     if(Number(m.scoreA)>Number(m.scoreB)){ aCls='winner'; bCls='loser'; } else { bCls='winner'; aCls='loser'; }
   }
   const drawTag = drawn ? `<span class="tab" style="padding:3px 9px;font-size:11px;cursor:default;background:#FBF3E4;color:var(--amber-dark);">引き分け</span>` : '';
+  const nextTag = opts.isNext ? `<span class="tab" style="padding:3px 9px;font-size:11px;cursor:default;background:var(--amber);color:var(--navy);font-weight:800;">▶ 次の試合</span>` : '';
   const row = el(`
-    <div class="match-row ${decided?'match-decided':''} ${drawn?'match-drawn':''}">
-      ${badge}${groupTag}
+    <div class="match-row ${decided?'match-decided':''} ${drawn?'match-drawn':''}" style="${opts.isNext?'background:#FDF6E8;border-radius:8px;box-shadow:inset 3px 0 0 var(--amber);':''}">
+      ${badge}${groupTag}${nextTag}
       <div class="match-team left ${aCls}">${escapeHtml(teamName(m.a))}</div>
-      <input type="number" min="0" data-input-key="prelim-${m.id}-a" value="${m.scoreA===null?'':m.scoreA}">
+      <input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" data-input-key="prelim-${m.id}-a" value="${m.scoreA===null?'':m.scoreA}">
       <span class="vs">−</span>
-      <input type="number" min="0" data-input-key="prelim-${m.id}-b" value="${m.scoreB===null?'':m.scoreB}">
+      <input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" data-input-key="prelim-${m.id}-b" value="${m.scoreB===null?'':m.scoreB}">
       <div class="match-team ${bCls}">${escapeHtml(teamName(m.b))}</div>
       ${drawTag}
     </div>
   `);
   const inputs = row.querySelectorAll('input');
-  inputs[0].addEventListener('input', e=>{ m.scoreA = e.target.value===''? null : e.target.value; scheduleRender(); });
-  inputs[1].addEventListener('input', e=>{ m.scoreB = e.target.value===''? null : e.target.value; scheduleRender(); });
+  inputs[0].addEventListener('input', e=>{ m.scoreA = clampScoreValue(e.target.value); scheduleRender(); });
+  inputs[1].addEventListener('input', e=>{ m.scoreB = clampScoreValue(e.target.value); scheduleRender(); });
   return row;
 }
 
@@ -1303,7 +1344,7 @@ function renderScheduleView(){
     </div>
   `);
   box.appendChild(head);
-  head.querySelector('#reshuffleSchedule').addEventListener('click', ()=>{ buildSchedule(); render(); });
+  head.querySelector('#reshuffleSchedule').addEventListener('click', ()=>{ buildSchedule(); render(); showToast('🔀 スケジュールを組み直しました'); });
 
   if(state.scheduleWarnings.length){
     const warn = el(`<div class="panel" style="margin-top:0;margin-bottom:14px;border-color:#EAC6C6;background:#FBEEEE;padding:14px 16px;"></div>`);
@@ -1312,11 +1353,17 @@ function renderScheduleView(){
   }
 
   const listBox = el(`<div class="panel" style="margin-top:0;border-color:#E5EAF2;background:var(--paper);"></div>`);
+  const nextMid = state.schedule.find(mid=>{
+    const m = matchById(mid);
+    if(!m) return false;
+    const hasScores = m.scoreA!==null && m.scoreA!=='' && m.scoreB!==null && m.scoreB!=='';
+    return !hasScores && !m.forfeitWinner;
+  });
   state.schedule.forEach((mid, i)=>{
     const m = matchById(mid);
     if(!m) return;
     const groupLabel = state.groups.length>1 ? `グループ${String.fromCharCode(65+m.groupIdx)}` : null;
-    listBox.appendChild(renderMatchRowEl(m, {badge: i+1, groupLabel}));
+    listBox.appendChild(renderMatchRowEl(m, {badge: i+1, groupLabel, isNext: mid===nextMid}));
   });
   box.appendChild(listBox);
   return box;
@@ -1746,10 +1793,10 @@ function renderBracket(){
       const canScore = !(ri===0 && bracketEditMode) && !m.forfeitWinner && m.a && m.b && m.a!=='BYE' && m.b!=='BYE';
       let scoreAInput=null, scoreBInput=null;
       if(canScore){
-        scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-a" value="${m.scoreA===null?'':m.scoreA}">`);
-        scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-b" value="${m.scoreB===null?'':m.scoreB}">`);
-        scoreAInput.addEventListener('input', e=>{ m.scoreA = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
-        scoreBInput.addEventListener('input', e=>{ m.scoreB = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
+        scoreAInput = el(`<input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-a" value="${m.scoreA===null?'':m.scoreA}">`);
+        scoreBInput = el(`<input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" style="width:52px;flex:none;" data-input-key="bracket-${ri}-${mi}-b" value="${m.scoreB===null?'':m.scoreB}">`);
+        scoreAInput.addEventListener('input', e=>{ m.scoreA = clampScoreValue(e.target.value); propagateByes(); scheduleRender(); });
+        scoreBInput.addEventListener('input', e=>{ m.scoreB = clampScoreValue(e.target.value); propagateByes(); scheduleRender(); });
       }
       box.appendChild(renderSlot(m, 'a', ri, mi, scoreAInput));
       box.appendChild(el(`<div class="bdivider"></div>`));
@@ -1785,10 +1832,10 @@ function renderBracket(){
     const canScore = !m3.forfeitWinner && m3.a && m3.b;
     let scoreAInput=null, scoreBInput=null;
     if(canScore){
-      scoreAInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-a" value="${m3.scoreA===null?'':m3.scoreA}">`);
-      scoreBInput = el(`<input type="number" min="0" style="width:52px;flex:none;" data-input-key="bracket-tp-b" value="${m3.scoreB===null?'':m3.scoreB}">`);
-      scoreAInput.addEventListener('input', e=>{ m3.scoreA = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
-      scoreBInput.addEventListener('input', e=>{ m3.scoreB = e.target.value===''?null:e.target.value; propagateByes(); scheduleRender(); });
+      scoreAInput = el(`<input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" style="width:52px;flex:none;" data-input-key="bracket-tp-a" value="${m3.scoreA===null?'':m3.scoreA}">`);
+      scoreBInput = el(`<input type="number" min="0" max="999" step="1" inputmode="numeric" pattern="[0-9]*" style="width:52px;flex:none;" data-input-key="bracket-tp-b" value="${m3.scoreB===null?'':m3.scoreB}">`);
+      scoreAInput.addEventListener('input', e=>{ m3.scoreA = clampScoreValue(e.target.value); propagateByes(); scheduleRender(); });
+      scoreBInput.addEventListener('input', e=>{ m3.scoreB = clampScoreValue(e.target.value); propagateByes(); scheduleRender(); });
     }
     box.appendChild(renderSlot(m3, 'a', -1, -1, scoreAInput));
     box.appendChild(el(`<div class="bdivider"></div>`));
@@ -1830,7 +1877,7 @@ function renderBracket(){
   wrap.querySelector('#toggleEdit').addEventListener('click', ()=>{ bracketEditMode=!bracketEditMode; render(); });
   wrap.querySelector('#reseedBtn').addEventListener('click', ()=>{
     const hasProgress = state.bracket.rounds.some(round=> round.some(m=> matchWinner(m) && m.a!=='BYE' && m.b!=='BYE'));
-    const proceed = ()=>{ generateBracket(); render(); };
+    const proceed = ()=>{ generateBracket(); render(); showToast('🔀 シードを組み直しました'); };
     if(hasProgress){
       showConfirmModal('すでに決着したカードがあります。シードを組み直すと、決勝トーナメントの結果はすべて消えます。よろしいですか？', proceed);
     } else {
@@ -1935,6 +1982,20 @@ document.addEventListener('focus', function(e){
     e.target.select();
   }
 }, true);
+
+document.addEventListener('keydown', function(e){
+  if(e.key!=='Enter') return;
+  const t = e.target;
+  if(!t || t.tagName!=='INPUT' || t.type!=='number' || !t.hasAttribute('data-input-key')) return;
+  e.preventDefault();
+  const all = Array.from(document.querySelectorAll('input[type="number"][data-input-key]'));
+  const idx = all.indexOf(t);
+  if(idx>-1 && idx<all.length-1){
+    all[idx+1].focus();
+  } else {
+    t.blur();
+  }
+});
 
 render();
 initHistory();
